@@ -18,8 +18,8 @@ class CoinMarketCapAPI:
 
     def list(self):
         self.update()
-        result = [(value['symbol'], value['name']) for key, value in self.ticker.items()]
-        return result
+        result = [(value['symbol'], value['name'], value['market_cap_usd']) for key, value in self.ticker.items()]
+        return sorted(result, key=lambda x: float(x[2]), reverse=True)
 
     def get_coin(self, symbol):
         self.update()
