@@ -1,11 +1,18 @@
 import logging
 from argparse import ArgumentParser
 from functools import partial
+from uuid import uuid4
 
-from telegram import ParseMode
-from telegram.ext import Updater, CommandHandler
+from telegram import ParseMode, InlineQueryResultArticle, InputTextMessageContent
+from telegram.ext import Updater, CommandHandler, InlineQueryHandler
 
 from coinmarketcap import CoinMarketCapAPI
+
+
+def stupid_filter(query, input_list):
+    query_set = set(query.lower())
+    result = filter(lambda x: query_set <= set((x[0].join(x[1])).lower()), input_list)
+    return result
 
 
 def format_coin(coin):
@@ -19,7 +26,8 @@ def start(_, update):
 I can help you follow the current crypto coin prices.\n\
 /help for more info\n\n\
 What\'s new?\n\
-I can now list top 50 coins, ordered by market cap'
+I can now list top 50 coins, ordered by market cap\n\
+I also support inline queries for easy sharing now'
     update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -35,7 +43,7 @@ def get_help(_, update):
 def list_coins(api, _, update):
     symbols_names = api.list()
     message = 'Top Tracked coins:\n' \
-              + '\n'.join('{0}. {2} - {1}'.format(i+1, *symbol) for i, symbol in enumerate(symbols_names))
+              + '\n'.join('{0}. {2} - {1}'.format(i + 1, *symbol) for i, symbol in enumerate(symbols_names))
     update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -90,6 +98,24 @@ def notification(api, coins, bot, job):
     bot.send_message(job.context, text=message, parse_mode=ParseMode.MARKDOWN)
 
 
+def inline_query(api, _, update):
+    query = update.inline_query.query
+    symbols = api.list()
+    filtered_list = stupid_filter(query, symbols)
+    results = [InlineQueryResultArticle(id=uuid4(),
+                                        title=('{0} - {1}'.format(*symbol)),
+                                        input_message_content=InputTextMessageContent(
+                                            format_coin(api.get_coin(symbol[0])),
+                                            parse_mode=ParseMode.MARKDOWN))
+               for symbol in filtered_list]
+    update.inline_query.answer(results)
+
+
+def error(_, update, error_message):
+    logger = logging.getLogger(__name__)
+    logger.warning('Update "%s" caused error "%s"' % (update, error_message))
+
+
 def main(token):
     updater = Updater(token)
     coin_api = CoinMarketCapAPI()
@@ -111,6 +137,11 @@ def main(token):
                                                   clear_notifications,
                                                   pass_args=False,
                                                   pass_chat_data=True))
+
+    coin_inline_query = partial(inline_query, coin_api)
+    updater.dispatcher.add_handler(InlineQueryHandler(coin_inline_query))
+
+    updater.dispatcher.add_error_handler(error)
 
     updater.start_polling()
     updater.idle()
