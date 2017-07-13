@@ -17,7 +17,9 @@ Hour *%(percent_change_1h)s%%* | Day *%(percent_change_24h)s%%* | Week *%(percen
 def start(_, update):
     message = 'Hi, I\'m the Crypto Coin Ticker Bot!.\n\
 I can help you follow the current crypto coin prices.\n\
-/help for more info'
+/help for more info\n\n\
+What\'s new?\n\
+I can now list top 50 coins, ordered by market cap'
     update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -31,14 +33,18 @@ def get_help(_, update):
 
 
 def list_coins(api, _, update):
-    message = 'Tracked coins:\n' + '\n'.join('{0}'.format(symbol) for symbol in api.list())
+    symbols_names = api.list()
+    message = 'Top Tracked coins:\n' \
+              + '\n'.join('{0}. {2} - {1}'.format(i+1, *symbol) for i, symbol in enumerate(symbols_names))
     update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
 
 def get_coin(api, _, update, args):
+    symbols = [i[0] for i in api.list()]
     if len(args) == 0:
         message = 'This commands takes one argument.'
-    elif args[0].upper() not in api.list():
+
+    elif args[0].upper() not in symbols:
         message = 'What\'s a {}?'.format(args[0])
     else:
         message = format_coin(api.get_coin(args[0]))
@@ -87,6 +93,7 @@ def notification(api, coins, bot, job):
 def main(token):
     updater = Updater(token)
     coin_api = CoinMarketCapAPI()
+    coin_api.update()
 
     updater.dispatcher.add_handler(CommandHandler('start', start))
     updater.dispatcher.add_handler(CommandHandler('help', get_help))
